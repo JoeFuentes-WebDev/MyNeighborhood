@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/TopBar'
@@ -37,8 +37,7 @@ export default function NeighborsPage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [expandedFloors, setExpandedFloors] = useState<Set<number>>(new Set())
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
-
+  
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))
   }, [])
@@ -50,10 +49,12 @@ export default function NeighborsPage() {
   const { data, loading } = useQuery(NEIGHBORS_QUERY, {
     variables: { buildingId },
     skip: !buildingId,
-    onCompleted: (data) => {
-      setFavoriteIds(new Set(data.myFavoriteIds))
-    }
   })
+
+  const favoriteIds = useMemo(
+    () => new Set<string>(data?.myFavoriteIds ?? []),
+    [data?.myFavoriteIds]
+  )
 
   const neighbors: Neighbor[] = data?.neighbors ?? []
   const myInterests: string[] = data?.me?.interests ?? []
