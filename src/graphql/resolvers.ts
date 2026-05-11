@@ -412,8 +412,9 @@ export const resolvers = {
   },
 
   Event: {
-    rsvps: (event: any) => event.rsvps ?? prisma.rSVP.findMany({
-      where: { eventId: event.id }, include: { user: true }
+    rsvps: (event: any) => prisma.rSVP.findMany({
+      where: { eventId: event.id },
+      include: { user: true }
     }),
     goingCount: async (event: any) => prisma.rSVP.count({
       where: { eventId: event.id, status: 'GOING' }
