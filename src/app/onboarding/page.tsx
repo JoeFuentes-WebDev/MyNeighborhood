@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Illustration } from '@/components/Illustration'
@@ -30,7 +30,7 @@ export interface UserBuildingItem {
   }
 }
 
-export default function OnboardingPage() {
+function OnboardingPage() {
   const router = useRouter()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [email, setEmail] = useState('')
@@ -423,5 +423,14 @@ export default function OnboardingPage() {
 
       </div>
     </div>
+  )
+}
+
+// new default export wraps with Suspense
+export default function OnboardingPageWrapper() {
+  return (
+    <Suspense>
+      <OnboardingPage />
+    </Suspense>
   )
 }
