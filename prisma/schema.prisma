@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Building {
+  id        String   @id @default(cuid())
+  name      String?
+  address   String
+  city      String
+  state     String
+  zip       String
+  createdAt DateTime @default(now())
+
+  units   Unit[]
+  members UserBuilding[]
+  posts   Post[]
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  buildingId String
+  unitNumber String
+
+  building    Building       @relation(fields: [buildingId], references: [id])
+  memberships UserBuilding[]
+
+  @@unique([buildingId, unitNumber])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  avatarUrl String?
+  role      Role     @default(RESIDENT)
+  joinedAt  DateTime @default(now())
+
+  showPhotos      Boolean @default(true)
+  showInterests   Boolean @default(true)
+  showUnit        Boolean @default(true)
+  allowDMs        Boolean @default(true)
+
+  interests String[]
+
+  buildings       UserBuilding[]
+  posts           Post[]
+  rsvps           RSVP[]
+  sentMessages    DirectMessage[] @relation("SentMessages")
+  recvMessages    DirectMessage[] @relation("ReceivedMessages")
+  notifications   Notification[]
+  postEngagements PostEngagement[]
+  photos          ProfilePhoto[]
+
+  favorites     NeighborFavorite[] @relation("UserFavorites")
+  favoritedBy   NeighborFavorite[] @relation("UserFavoritedBy")
+}
+
+model UserBuilding {
+  id         String   @id @default(cuid())
+  userId     String
+  buildingId String
+  unitId     String
+  joinedAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id])
+  unit     Unit     @relation(fields: [unitId], references: [id])
+
+  @@unique([userId, buildingId])
+}
+
+model ProfilePhoto {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String
+  label     String?
+  order     Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  RESIDENT
+  BUILDING_ADMIN
+}
+
+model Post {
+  id         String    @id @default(cuid())
+  authorId   String
+  buildingId String
+  type       PostType
+  title      String
+  body       String
+  createdAt  DateTime  @default(now())
+
+  price     Float?
+  isFree    Boolean?
+  condition String?
+
+  author   User     @relation(fields: [authorId], references: [id])
+  building Building @relation(fields: [buildingId], references: [id])
+
+  images PostImage[]
+  event  Event?
+  engagements PostEngagement[]
+}
+
+enum PostType {
+  ANNOUNCEMENT
+  EVENT
+  MARKETPLACE
+  DISCUSSION
+}
+
+model PostImage {
+  id        String    @id @default(cuid())
+  postId    String
+  url       String?
+  order     Int
+  expiresAt DateTime
+  warningAt DateTime?
+  expiredAt DateTime?
+  createdAt DateTime  @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id        String    @id @default(cuid())
+  postId    String    @unique
+  location  String?
+  startsAt  DateTime
+  endsAt    DateTime?
+
+  post  Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  rsvps RSVP[]
+}
+
+model RSVP {
+  id      String     @id @default(cuid())
+  eventId String
+  userId  String
+  status  RSVPStatus
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+}
+
+enum RSVPStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+model DirectMessage {
+  id        String   @id @default(cuid())
+  fromId    String
+  toId      String
+  body      String
+  sentAt    DateTime @default(now())
+  read      Boolean  @default(false)
+
+  from User @relation("SentMessages", fields: [fromId], references: [id])
+  to   User @relation("ReceivedMessages", fields: [toId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  read      Boolean          @default(false)
+  payload   Json
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum NotificationType {
+  IMAGE_EXPIRING
+  POST_COMMENT
+  DM
+  RSVP
+}
+
+model PostEngagement {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  type      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, type])
+}
+
+model NeighborFavorite {
+  id          String   @id @default(cuid())
+  userId      String
+  favoritedId String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  favorited User @relation("UserFavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoritedId])
+}
