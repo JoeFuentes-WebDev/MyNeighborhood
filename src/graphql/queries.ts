@@ -92,3 +92,13 @@ export const EVENTS_QUERY = gql`
   }
   ${POST_FIELDS}
 `
+export const BUILDING_QUERY = gql`
+  query Building($id: ID!) {
+    building(id: $id) {
+      id
+      name
+      address
+      zip
+    }
+  }
+`

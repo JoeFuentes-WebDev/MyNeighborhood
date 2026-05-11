@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useQuery, useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/TopBar'
 import { BottomNav } from '@/components/BottomNav'
-import { Settings, X, Plus, Camera } from 'lucide-react'
+import { Settings, X, Plus, Camera, Share2, Copy, Check } from 'lucide-react'
 import { uploadImage, uploadAvatar } from '@/lib/cloudinary'
-import { InterestTag } from '@/components/InterestTab' 
+import { InterestTag } from '@/components/InterestTag'
 import Image from 'next/image'
 import type { ProfilePhoto } from '@/types'
-import { useQuery, useMutation } from '@apollo/client'
+import { safeFormat } from '@/lib/dates'
 import { ME_QUERY } from '@/graphql/queries'
 import {
   UPDATE_PROFILE_MUTATION,
@@ -18,23 +19,24 @@ import {
   UPDATE_PHOTO_LABEL_MUTATION,
   DELETE_PHOTO_MUTATION,
 } from '@/graphql/mutations'
-import { safeFormat } from '@/lib/dates'
+import QRCode from 'qrcode'
 
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!value)}
-      className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${value ? 'bg-teal-400' : 'bg-gray-200'}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${value ? 'right-0.5' : 'left-0.5'}`} />
-    </button>
-  )
-}
+const Toggle = ({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) => (
+  <button
+    onClick={() => onChange(!value)}
+    className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${value ? 'bg-teal-400' : 'bg-gray-200'}`}
+  >
+    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${value ? 'right-0.5' : 'left-0.5'}`} />
+  </button>
+)
 
 export default function ProfilePage() {
   const router = useRouter()
+  const settingsRef = useRef<HTMLDivElement>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [copied, setCopied] = useState(false)
   const [newInterest, setNewInterest] = useState('')
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -53,8 +55,47 @@ export default function ProfilePage() {
   const me = data?.me
   const initials = me?.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) ?? '?'
   const canAddPhoto = (me?.photos?.length ?? 0) < 3
+  const buildingId = me?.buildings?.[0]?.building?.id
+  const buildingName = me?.buildings?.[0]?.building?.name
+  const unitNumber = me?.buildings?.[0]?.unit?.unitNumber
 
-  async function handleAvatarUpload(file: File) {
+  const inviteUrl = typeof window !== 'undefined' && buildingId
+    ? `${window.location.origin}/join/${buildingId}`
+    : ''
+
+  const handleToggleSettings = () => {
+    setShowSettings(s => {
+      if (!s) {
+        setTimeout(() => {
+          settingsRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
+      }
+      return !s
+    })
+  }
+
+  const handleShare = async () => {
+    if (!inviteUrl) return
+    try {
+      const url = await QRCode.toDataURL(inviteUrl, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#085041', light: '#ffffff' },
+      })
+      setQrDataUrl(url)
+      setShowShareModal(true)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleCopyLink = async () => {
+    await navigator.clipboard.writeText(inviteUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleAvatarUpload = async (file: File) => {
     setUploadingAvatar(true)
     try {
       const url = await uploadAvatar(file)
@@ -67,7 +108,7 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleAddPhoto(file: File) {
+  const handleAddPhoto = async (file: File) => {
     setUploadingPhoto(true)
     try {
       const url = await uploadImage(file, 'profiles')
@@ -80,23 +121,23 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleSaveLabel(id: string) {
+  const handleSaveLabel = async (id: string) => {
     await updatePhotoLabel({ variables: { id, label: labelValue } })
     setEditingLabel(null)
     await refetch()
   }
 
-  async function handleDeletePhoto(id: string) {
+  const handleDeletePhoto = async (id: string) => {
     await deletePhoto({ variables: { id } })
     await refetch()
   }
 
-  async function handleToggle(field: string, value: boolean) {
+  const handleToggle = async (field: string, value: boolean) => {
     await updateProfile({ variables: { [field]: value } })
     await refetch()
   }
 
-  async function addInterest() {
+  const addInterest = async () => {
     const trimmed = newInterest.trim().toLowerCase()
     if (!trimmed || me?.interests?.includes(trimmed)) return
     const updated = [...(me?.interests ?? []), trimmed]
@@ -105,15 +146,16 @@ export default function ProfilePage() {
     await refetch()
   }
 
-  async function removeInterest(interest: string) {
+  const removeInterest = async (interest: string) => {
     const updated = me?.interests?.filter((i: string) => i !== interest) ?? []
     await updateProfile({ variables: { interests: updated } })
     await refetch()
   }
 
-  function handleLogout() {
+  const handleLogout = () => {
     localStorage.removeItem('neighbors_token')
     localStorage.removeItem('neighbors_building')
+    localStorage.removeItem('neighbors_user')
     router.push('/onboarding')
   }
 
@@ -132,8 +174,8 @@ export default function ProfilePage() {
         title="My profile"
         back
         right={
-          <button onClick={() => setShowSettings(s => !s)} className="text-gray-400 hover:text-gray-600">
-            <Settings size={20} strokeWidth={1.5} />
+          <button onClick={handleToggleSettings} className="text-gray-400 hover:text-gray-600">
+            <Settings size={20} strokeWidth={showSettings ? 2 : 1.5} />
           </button>
         }
       />
@@ -150,10 +192,8 @@ export default function ProfilePage() {
               {uploadingAvatar ? (
                 <span className="text-[10px] text-teal-600">...</span>
               ) : me?.avatarUrl ? (
-                <Image src={me.avatarUrl} alt="avatar" width={64} height={64} className="w-full h-full object-cover" />
-              ) : (
-                initials
-              )}
+                <Image src={me.avatarUrl} alt="avatar" width={64} height={64} className="object-cover rounded-full" />
+              ) : initials}
             </button>
             <button
               onClick={() => avatarRef.current?.click()}
@@ -173,8 +213,8 @@ export default function ProfilePage() {
             />
           </div>
           <div className="text-[17px] font-medium text-gray-900">{me?.name}</div>
-          <div className="text-[13px] text-gray-500">
-            Unit {me?.buildings?.[0]?.unit?.unitNumber} · {me?.buildings?.[0]?.building?.name} · Member since {safeFormat(me?.joinedAt, 'MMMM yyyy')}
+          <div className="text-[13px] text-gray-500 text-center">
+            Unit {unitNumber} · {buildingName} · Member since {safeFormat(me?.joinedAt, 'MMMM yyyy')}
           </div>
         </div>
 
@@ -187,12 +227,7 @@ export default function ProfilePage() {
             {me?.photos?.map((photo: ProfilePhoto) => (
               <div key={photo.id} className="flex-1 flex flex-col gap-1.5">
                 <div className="relative aspect-square rounded-xl overflow-hidden border border-gray-100">
-                  <Image
-                    src={photo.url}
-                    alt={photo.label ?? ''}
-                    fill
-                    className="object-cover"
-                  />
+                  <Image src={photo.url} alt={photo.label ?? ''} fill className="object-cover" />
                   <button
                     onClick={() => handleDeletePhoto(photo.id)}
                     className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/40 flex items-center justify-center"
@@ -309,7 +344,7 @@ export default function ProfilePage() {
 
         {/* Settings */}
         {showSettings && (
-          <div className="bg-white border-b border-gray-100 px-4 py-4">
+          <div ref={settingsRef} className="bg-white border-b border-gray-100 px-4 py-4">
             <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-3">Settings</div>
             <div className="space-y-1">
               <div className="text-[13px] text-gray-500 py-2 border-b border-gray-50">
@@ -318,11 +353,21 @@ export default function ProfilePage() {
               </div>
               <div className="text-[13px] text-gray-500 py-2 border-b border-gray-50">
                 <span className="text-gray-400 text-[11px] uppercase tracking-wide block mb-0.5">Building</span>
-                {me?.buildings?.[0]?.building?.name}
+                {buildingName}
               </div>
               <button
+                onClick={handleShare}
+                className="w-full flex items-center justify-between py-3 border-b border-gray-50 hover:text-teal-700 transition-colors"
+              >
+                <div>
+                  <div className="text-[13px] text-gray-900 text-left">Share your building</div>
+                  <div className="text-[11px] text-gray-400 text-left">Invite neighbors with a QR code or link</div>
+                </div>
+                <Share2 size={16} className="text-gray-400" />
+              </button>
+              <button
                 onClick={handleLogout}
-                className="w-full text-left text-[13px] text-red-500 py-3 hover:text-red-600 transition-colors"
+                className="w-full flex items-center justify-center py-2.5 mt-2 rounded-xl border border-red-100 bg-red-50 text-[13px] font-medium text-red-500 hover:bg-red-100 transition-colors"
               >
                 Sign out
               </button>
@@ -331,6 +376,45 @@ export default function ProfilePage() {
         )}
 
       </div>
+
+      {/* Share modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col items-center gap-4">
+            <div className="w-full flex items-center justify-between mb-1">
+              <div className="text-[15px] font-medium text-gray-900">Invite neighbors</div>
+              <button onClick={() => setShowShareModal(false)}>
+                <X size={20} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="text-[13px] text-gray-500 text-center">
+              Share this QR code or link with neighbors in {buildingName}.
+            </div>
+
+            {qrDataUrl && (
+              <div className="p-3 bg-white rounded-xl border border-gray-100">
+                <img src={qrDataUrl} alt="QR code" width={280} height={280} />
+              </div>
+            )}
+
+            <button
+              onClick={handleCopyLink}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-gray-200 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {copied
+                ? <><Check size={14} className="text-teal-600" /> Copied!</>
+                : <><Copy size={14} /> Copy invite link</>
+              }
+            </button>
+
+            <div className="text-[11px] text-gray-400 text-center px-4">
+              Anyone with this link can join your building community.
+            </div>
+          </div>
+        </div>
+      )}
+
       <BottomNav />
     </div>
   )
