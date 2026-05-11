@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 import { useQuery } from '@apollo/client'
 import { Illustration } from '@/components/Illustration'
 import { useRouter } from 'next/navigation'
+import { BUILDING_QUERY } from '@/graphql/queries'
 
 export default function JoinPage() {
   const params = useParams()
