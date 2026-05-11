@@ -418,6 +418,12 @@ export const resolvers = {
     goingCount: async (event: any) => prisma.rSVP.count({
       where: { eventId: event.id, status: 'GOING' }
     }),
+    startsAt: (event: any) => event.startsAt instanceof Date
+      ? event.startsAt.toISOString()
+      : String(event.startsAt),
+    endsAt: (event: any) => event.endsAt
+      ? (event.endsAt instanceof Date ? event.endsAt.toISOString() : String(event.endsAt))
+      : null,
   },
 
   User: {
