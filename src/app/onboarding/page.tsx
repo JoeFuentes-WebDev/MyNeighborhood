@@ -13,6 +13,10 @@ import {
   LEAVE_BUILDING_MUTATION,
 } from '@/graphql/mutations'
 
+import { useSearchParams } from 'next/navigation'
+
+// inside the component:
+
 export interface UserBuildingItem {
   id: string
   building: {
@@ -129,6 +133,21 @@ export default function OnboardingPage() {
   }
 
   const buildings = data?.myBuildings ?? []
+
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      const address = searchParams.get('address')
+      const zip = searchParams.get('zip')
+      if (address) setAddress(address)
+      if (zip) setZip(zip)
+      if (address || zip) {
+        setExpanded('register')
+        setStep('address')
+      }
+    })
+  }, [searchParams])
 
   return (
     <div className="min-h-screen bg-white flex flex-col max-w-lg mx-auto">
