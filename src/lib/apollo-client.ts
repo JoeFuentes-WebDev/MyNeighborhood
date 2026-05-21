@@ -2,10 +2,17 @@
 
 import { ApolloClient, InMemoryCache, createHttpLink, from } from '@apollo/client'
 import { setContext } from '@apollo/client/link/context'
+import { onError } from '@apollo/client/link/error'
 
-const httpLink = createHttpLink({
-  uri: '/api/graphql',
+const errorLink = onError(({ graphQLErrors }) => {
+  if (graphQLErrors?.some((e: { extensions?: { code?: string } }) => e.extensions?.code === 'UNAUTHENTICATED')) {
+    localStorage.removeItem('neighbors_token')
+    localStorage.removeItem('neighbors_building')
+    window.location.href = '/onboarding'
+  }
 })
+
+const httpLink = createHttpLink({ uri: '/api/graphql' })
 
 const authLink = setContext((_, { headers }) => {
   const token = typeof window !== 'undefined'
@@ -21,7 +28,7 @@ const authLink = setContext((_, { headers }) => {
 })
 
 export const apolloClient = new ApolloClient({
-  link: from([authLink, httpLink]),
+  link: from([errorLink, authLink, httpLink]),
   cache: new InMemoryCache({
     typePolicies: {
       Query: {
