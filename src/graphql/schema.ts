@@ -198,5 +198,6 @@ export const typeDefs = gql`
 
     addFavorite(favoritedId: ID!): Boolean!
     removeFavorite(favoritedId: ID!): Boolean!
+    submitFeedback(body: String!): Boolean!
   }
 `

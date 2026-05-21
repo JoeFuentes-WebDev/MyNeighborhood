@@ -58,6 +58,8 @@ model User {
 
   favorites     NeighborFavorite[] @relation("UserFavorites")
   favoritedBy   NeighborFavorite[] @relation("UserFavoritedBy")
+
+  feedback  Feedback[]
 }
 
 model UserBuilding {
@@ -213,4 +215,13 @@ model NeighborFavorite {
   favorited User @relation("UserFavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
 
   @@unique([userId, favoritedId])
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String?
+  body      String
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
 }

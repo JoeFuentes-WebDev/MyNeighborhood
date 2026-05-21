@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { GraphQLError } from 'graphql'
+type PostParent = { id: string; authorId: string; buildingId: string; type?: string; images?: unknown[]; event?: unknown }
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'dev-secret'
 
@@ -47,7 +48,7 @@ export const resolvers = {
       return prisma.post.findMany({
         where: {
           buildingId,
-          ...(type ? { type: type as any } : {}),
+          ...(type ? { type: type as import('@prisma/client').PostType } : {}),
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -70,7 +71,7 @@ export const resolvers = {
         where: { buildingId },
         include: { user: true },
       })
-      return memberships.map((m: any) => m.user)
+      return memberships.map((m: { user: import('@prisma/client').User }) => m.user)
     },
 
     neighbor: async (_: unknown, { id }: { id: string }, ctx: { userId?: string }) => {
@@ -87,7 +88,12 @@ export const resolvers = {
       })
 
       const seen = new Set<string>()
-      const convos: any[] = []
+      const convos: Array<{
+        participant: { id: string; name: string; avatarUrl: string | null }
+        lastMessage: { id: string; fromId?: string; toId?: string; body: string; sentAt: Date | string; read: boolean; from?: unknown; to?: unknown }
+        unreadCount: number
+      }> = []
+
       for (const msg of messages) {
         const otherId = msg.fromId === userId ? msg.toId : msg.fromId
         if (seen.has(otherId)) continue
@@ -229,7 +235,7 @@ export const resolvers = {
         data: {
           authorId: userId,
           buildingId: args.buildingId,
-          type: args.type as any,
+          type: args.type as import('@prisma/client').PostType,
           title: args.title,
           body: args.body,
           price: args.price,
@@ -257,8 +263,8 @@ export const resolvers = {
       const userId = getUser(ctx)
       return prisma.rSVP.upsert({
         where: { eventId_userId: { eventId, userId } },
-        update: { status: status as any },
-        create: { eventId, userId, status: status as any },
+        update: { status: status as import('@prisma/client').RSVPStatus },
+        create: { eventId, userId, status: status as import('@prisma/client').RSVPStatus },
         include: { user: true },
       })
     },
@@ -388,18 +394,30 @@ export const resolvers = {
       })
       return true
     },
+
+    submitFeedback: async (_: unknown, { body }: { body: string }, context: { userId?: string }) => {
+      await prisma.feedback.create({
+        data: {
+          body,
+          userId: context.userId ?? null,
+        }
+      })
+      return true
+    },
+
   },
 
   Post: {
-    author: (post: any) => prisma.user.findUnique({ where: { id: post.authorId } }),
-    building: (post: any) => prisma.building.findUnique({ where: { id: post.buildingId } }),
-    images: (post: any) => post.images ?? prisma.postImage.findMany({
+    
+    author: (post: PostParent) => prisma.user.findUnique({ where: { id: post.authorId } }),
+    building: (post: PostParent) => prisma.building.findUnique({ where: { id: post.buildingId } }),
+    images: (post: PostParent) => post.images ?? prisma.postImage.findMany({
       where: { postId: post.id }, orderBy: { order: 'asc' }
     }),
-    event: (post: any) => post.event ?? prisma.event.findUnique({
+    event: (post: PostParent) => post.event ?? prisma.event.findUnique({
       where: { postId: post.id }, include: { rsvps: true }
     }),
-    rsvpCount: async (post: any) => {
+    rsvpCount: async (post: PostParent) => {
       if (post.type !== 'EVENT') return null
       const event = await prisma.event.findUnique({ where: { postId: post.id } })
       if (!event) return 0
@@ -408,34 +426,34 @@ export const resolvers = {
   },
 
   PostImage: {
-    daysUntilExpiry: (img: any) => daysUntilExpiry(new Date(img.expiresAt)),
+    daysUntilExpiry: (img: { expiresAt: Date | string }) => daysUntilExpiry(new Date(img.expiresAt)),
   },
 
   Event: {
-    rsvps: (event: any) => prisma.rSVP.findMany({
+    rsvps: (event: { id: string }) => prisma.rSVP.findMany({
       where: { eventId: event.id },
       include: { user: true }
     }),
-    goingCount: async (event: any) => prisma.rSVP.count({
+    goingCount: async (event: { id: string }) => prisma.rSVP.count({
       where: { eventId: event.id, status: 'GOING' }
     }),
-    startsAt: (event: any) => event.startsAt instanceof Date
+    startsAt: (event: { id: string; startsAt: Date | string }) => event.startsAt instanceof Date
       ? event.startsAt.toISOString()
       : String(event.startsAt),
-    endsAt: (event: any) => event.endsAt
+    endsAt: (event:  { id: string; endsAt: Date | string }) => event.endsAt
       ? (event.endsAt instanceof Date ? event.endsAt.toISOString() : String(event.endsAt))
       : null,
   },
 
   User: {
-    buildings: (user: any) => prisma.userBuilding.findMany({
+    buildings: (user: { id: string }) => prisma.userBuilding.findMany({
       where: { userId: user.id },
       include: { building: true, unit: true },
     }),
-    photos: (user: any) => prisma.profilePhoto.findMany({
+    photos: (user: { id: string }) => prisma.profilePhoto.findMany({
       where: { userId: user.id }, orderBy: { order: 'asc' }
     }),
-    posts: (user: any) => prisma.post.findMany({
+    posts: (user: { id: string }) => prisma.post.findMany({
       where: { authorId: user.id }, orderBy: { createdAt: 'desc' }, take: 10
     }),
     isFavorited: async (user: { id: string }, _: unknown, ctx: { userId?: string }) => {
@@ -448,15 +466,15 @@ export const resolvers = {
   },
 
   UserBuilding: {
-    user: (ub: any) => prisma.user.findUnique({ where: { id: ub.userId } }),
-    building: (ub: any) => ub.building ?? prisma.building.findUnique({ where: { id: ub.buildingId } }),
-    unit: (ub: any) => ub.unit ?? prisma.unit.findUnique({ where: { id: ub.unitId } }),
+    user: (ub: { userId: string }) => prisma.user.findUnique({ where: { id: ub.userId } }),
+    building: (ub: { buildingId: string; building?: unknown }) => ub.building ?? prisma.building.findUnique({ where: { id: ub.buildingId } }),
+    unit: (ub: { unitId: string; unit?: unknown }) => ub.unit ?? prisma.unit.findUnique({ where: { id: ub.unitId } }),
   },
 
   Building: {
-    units: (b: any) => prisma.unit.findMany({ where: { buildingId: b.id } }),
-    members: (b: any) => prisma.userBuilding.findMany({ where: { buildingId: b.id } }),
-    posts: (b: any) => prisma.post.findMany({
+    units: (b: { id: string }) => prisma.unit.findMany({ where: { buildingId: b.id } }),
+    members: (b: { id: string }) => prisma.userBuilding.findMany({ where: { buildingId: b.id } }),
+    posts: (b: { id: string }) => prisma.post.findMany({
       where: { buildingId: b.id }, orderBy: { createdAt: 'desc' }
     }),
   },
